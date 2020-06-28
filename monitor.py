@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 import telebot
+from tqdm import tqdm
 
 import config
 from Parser import Parser
@@ -22,10 +23,14 @@ def send_records(items, caption=""):
 
 if __name__ == "__main__":
     ps = Parser(config.SELENOID_ADRESS, config.SELENOID_PROXY)
-    tasks = Items.select().where((Items.status == TaskStatus.FOR_UPDATE) |
-                                 (Items.status == TaskStatus.FOR_LOAD)).execute()
+    tasks = Items.select().where(
+        (Items.status == TaskStatus.FOR_UPDATE) | (Items.status == TaskStatus.FOR_LOAD)).execute()
 
-    ps.update_and_load_items()
+    for t in tqdm(tasks):
+        try:
+            ps.execute_task(t)
+        except Exception as e:
+            print(e)
 
     for shop in ["wilberrries", "ozon", "beru"]:
         items_loads = Items.select().where((Items.shop == shop)
@@ -57,7 +62,7 @@ if __name__ == "__main__":
             send_records(items_update, f"Ежеднеаное обновление товаров с "
                                        f"{shop} ({datetime.now().strftime('%d.%m')})")
 
-    # Items.delete().where(Items.status == TaskStatus.LOAD_COMPLE).execute()
+    Items.delete().where(Items.status == TaskStatus.LOAD_COMPLE).execute()
 
     if datetime.now().strftime("%H:%M") == "00:00":
         print("New cycle begin")

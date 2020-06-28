@@ -137,4 +137,4 @@ def text_mes(message):
 
 
 print("Start")
-bot.polling(none_stop=False, timeout=60)
+bot.polling(none_stop=True, timeout=60)

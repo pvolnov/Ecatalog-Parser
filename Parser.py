@@ -159,34 +159,33 @@ class Parser:
 
         return data
 
-    def update_and_load_items(self):
-        tasks = Items.select().where(
-            (Items.status == TaskStatus.FOR_UPDATE) | (Items.status == TaskStatus.FOR_LOAD)).execute()
-        for t in tqdm(tasks):
-            if t.shop == "wildberries":
-                dat = self.parse_wileberrise(t.url)
-            elif t.shop == "ozon":
-                dat = self.parse_ozon(t.url)
-            elif t.shop == "beru":
-                dat = self.parse_beru(t.url)
+    def execute_task(self, t: Items):
+        if t.shop == "wildberries":
+            dat = self.parse_wileberrise(t.url)
+        elif t.shop == "ozon":
+            dat = self.parse_ozon(t.url)
+        elif t.shop == "beru":
+            dat = self.parse_beru(t.url)
 
-            if t.shop == "beru":
-                t.sold = dat["sold"]
-            else:
-                t.sold += max(t.stock - dat["stock"], 0)
-            t.price = dat["price"]
-            t.stock = dat["stock"]
-            t.stars = dat["stars"]
-            t.review = dat["review"]
-            t.brand = dat["brand"]
-            t.color = dat["color"]
+        if t.shop == "beru":
+            t.sold = dat["sold"]
+        elif t.shop == "wildberries" and t.status == TaskStatus.FOR_LOAD:
+            r = requests.get(t.url)
+            count = re.search(r"ordersCount\":\d+", r.text)
+            if count:
+                t.sold = count.group(0).replace("ordersCount\":", "")
+        else:
+            t.sold += max(t.stock - dat["stock"], 0)
 
-            if t.status == TaskStatus.FOR_LOAD:
-                r = requests.get(t.url)
-                count = re.search(r"ordersCount\":\d+", r.text)
-                if count:
-                    t.sold = count.group(0).replace("ordersCount\":", "")
-                t.status = TaskStatus.LOAD_COMPLE
-            else:
-                t.status = TaskStatus.UPDATE_COMPLE
-            t.save()
+        t.price = dat["price"]
+        t.stock = dat["stock"]
+        t.stars = dat["stars"]
+        t.review = dat["review"]
+        t.brand = dat["brand"]
+        t.color = dat["color"]
+
+        if t.status == TaskStatus.FOR_LOAD:
+            t.status = TaskStatus.LOAD_COMPLE
+        else:
+            t.status = TaskStatus.UPDATE_COMPLE
+        t.save()
