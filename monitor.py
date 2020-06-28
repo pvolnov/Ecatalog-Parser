@@ -63,8 +63,8 @@ if __name__ == "__main__":
                 send_records(items_update, f"Ежеднеаное обновление товаров с "
                                            f"{shop} ({datetime.now().strftime('%d.%m')})")
 
-                Items.update({Items.status: TaskStatus.UPDATE_SUSPENDED}).where(
-                    Items.status == TaskStatus.UPDATE_COMPLE).execute()
+        Items.update({Items.status: TaskStatus.UPDATE_SUSPENDED}).where(
+            Items.status == TaskStatus.UPDATE_COMPLE).execute()
 
         Items.delete().where(Items.status == TaskStatus.LOAD_COMPLE).execute()
         if datetime.now().strftime("%H:%M") == "00:00":
