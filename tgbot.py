@@ -3,7 +3,9 @@ from enum import Enum
 import telebot
 from telebot import types
 import pandas as pd
-from config import telegram_bot_key
+
+import config
+from config import TG_BOT_APY_KEY
 from models import Items, Users, DialogState, TaskStatus
 
 
@@ -12,9 +14,11 @@ class btns:
     WAIT_OZON_FOR_PARSE = "Мониторить товары Ozon 🔄"
     WAIT_WILBERRIES_FOR_LOAD = "Скачать товары с Wilberries ⬇️"
     WAIT_WILBERRIES_FOR_PARSE = "Мониторить товары с Wilberries 🔄"
+    WAIT_BERU_FOR_LOAD = "Скачать товары с Beru ⬇️"
+    WAIT_BERU_FOR_PARSE = "Мониторить товары Beru 🔄"
 
 
-bot = telebot.TeleBot(telegram_bot_key)
+bot = telebot.TeleBot(TG_BOT_APY_KEY)
 
 parsels_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
                                              one_time_keyboard=True,
@@ -24,6 +28,8 @@ parsels_keyboard.add(
     types.KeyboardButton(text=btns.WAIT_WILBERRIES_FOR_PARSE),
     types.KeyboardButton(text=btns.WAIT_OZON_FOR_LOAD),
     types.KeyboardButton(text=btns.WAIT_OZON_FOR_PARSE),
+    types.KeyboardButton(text=btns.WAIT_BERU_FOR_LOAD),
+    types.KeyboardButton(text=btns.WAIT_BERU_FOR_PARSE),
 )
 
 
@@ -72,6 +78,14 @@ def new_doc(message):
         items = [{"url": u,
                   "shop": "ozon",
                   "status": TaskStatus.FOR_LOAD} for u in urls]
+    elif user.dstat == DialogState.WAIT_BERU_FOR_PARSE:
+        items = [{"url": u,
+                  "shop": "beru",
+                  "status": TaskStatus.FOR_UPDATE} for u in urls]
+    elif user.dstat == DialogState.WAIT_BERU_FOR_LOAD:
+        items = [{"url": u,
+                  "shop": "beru",
+                  "status": TaskStatus.FOR_LOAD} for u in urls]
     else:
         bot.reply_to(message, 'Error: incorrect message state')
         return
@@ -84,7 +98,7 @@ def new_doc(message):
 
 @bot.message_handler(content_types=["text"])
 def text_mes(message):
-    if message.text == "test":
+    if message.text == config.TG_BOT_PASW:
         if Users.get_or_none(Users.tel_id == message.chat.id) is None:
             Users.create(tel_id=message.chat.id,
                          name=str(message.from_user.first_name) + " " + str(message.from_user.last_name))
@@ -108,6 +122,12 @@ def text_mes(message):
 
     elif message.text == btns.WAIT_OZON_FOR_PARSE:
         user.dstat = DialogState.WAIT_OZON_FOR_PARSE
+
+    elif message.text == btns.WAIT_BERU_FOR_LOAD:
+        user.dstat = DialogState.WAIT_BERU_FOR_LOAD
+
+    elif message.text == btns.WAIT_BERU_FOR_PARSE:
+        user.dstat = DialogState.WAIT_BERU_FOR_PARSE
 
     if dstat != user.dstat:
         user.save()
