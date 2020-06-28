@@ -46,10 +46,16 @@ def start(message):
         will_load = Items.select().where(Items.status == TaskStatus.FOR_LOAD).count()
         loaded = Items.select().where(Items.status == TaskStatus.LOAD_COMPLE).count()
 
-        will_parse = Items.select().where(Items.status == TaskStatus.FOR_UPDATE).count()
-        parsed = Items.select().where(Items.status == TaskStatus.UPDATE_COMPLE).count()
+        updated_done = Items.select().where(Items.status.in_[
+                                          TaskStatus.UPDATE_COMPLE,
+                                          TaskStatus.UPDATE_SUSPENDED]).count()
+        parsed_total = Items.select().where(Items.status.in_[
+                                          TaskStatus.UPDATE_COMPLE,
+                                          TaskStatus.FOR_UPDATE,
+                                          TaskStatus.UPDATE_SUSPENDED]).count()
+
         bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}\n"
-                                          f"Обновлено {parsed}/{parsed + will_parse}")
+                                          f"Обновлено {updated_done}/{parsed_total}")
 
 
 @bot.message_handler(content_types=['document'])
