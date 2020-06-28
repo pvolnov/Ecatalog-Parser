@@ -12,6 +12,7 @@ class TaskStatus:
     FOR_LOAD = 1
     LOAD_COMPLE = 2
     UPDATE_COMPLE = 3
+    UPDATE_SUSPENDED = 4
 
 
 class DialogState:

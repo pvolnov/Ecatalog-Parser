@@ -23,50 +23,53 @@ def send_records(items, caption=""):
 
 if __name__ == "__main__":
     ps = Parser(config.SELENOID_ADRESS, config.SELENOID_PROXY)
-    tasks = Items.select().where(
-        (Items.status == TaskStatus.FOR_UPDATE) | (Items.status == TaskStatus.FOR_LOAD)).execute()
 
-    for t in tqdm(tasks):
-        try:
-            ps.execute_task(t)
-        except Exception as e:
-            print(e)
+    while True:
+        tasks = Items.select().where(
+            (Items.status == TaskStatus.FOR_UPDATE) | (Items.status == TaskStatus.FOR_LOAD)).execute()
+        for t in tqdm(tasks):
+            try:
+                ps.execute_task(t)
+            except Exception as e:
+                print(e)
 
-    for shop in ["wilberrries", "ozon", "beru"]:
-        items_loads = Items.select().where((Items.shop == shop)
-                                           & (Items.status == TaskStatus.LOAD_COMPLE)).execute()
-        if len(items_loads) > 0:
-            items_loads = [{
-                "Бренд": i.brand,
-                "Ссылка": i.url,
-                "Артикул": re.search(r"\d+", i.url).group(0),
-                "Цена": i.price,
-                "Количество заказов": i.sold,
-                "Цвет": i.color,
-                "Колисество отзывов": i.review,
-                "Рейтинг": i.stars,
-            } for i in items_loads]
+        for shop in ["wilberries", "ozon", "beru"]:
+            items_loads = Items.select().where((Items.shop == shop)
+                                               & (Items.status == TaskStatus.LOAD_COMPLE)).execute()
+            if len(items_loads) > 0:
+                items_loads = [{
+                    "Бренд": i.brand,
+                    "Ссылка": i.url,
+                    "Артикул": re.search(r"\d+", i.url).group(0),
+                    "Цена": i.price,
+                    "Количество заказов": i.sold,
+                    "Цвет": i.color,
+                    "Колисество отзывов": i.review,
+                    "Рейтинг": i.stars,
+                } for i in items_loads]
 
-            send_records(items_loads, f"Выкаченные с {shop} товары ({len(items_loads)})")
+                send_records(items_loads, f"Выкаченные с {shop} товары ({len(items_loads)})")
 
-        items_update = Items.select().where((Items.shop == shop)
-                                            & (Items.status == TaskStatus.UPDATE_COMPLE)).execute()
-        if len(items_update) > 0:
-            items_update = [{
-                "Ссылка": i.url,
-                "Артикул": re.search(r"\d+", i.url).group(0),
-                "Цена": i.price,
-                "Остаток": i.stock,
-                "Продано": i.sold,
-            } for i in items_update]
-            send_records(items_update, f"Ежеднеаное обновление товаров с "
-                                       f"{shop} ({datetime.now().strftime('%d.%m')})")
+            items_update = Items.select().where((Items.shop == shop)
+                                                & (Items.status == TaskStatus.UPDATE_COMPLE)).execute()
+            if len(items_update) > 0:
+                items_update = [{
+                    "Ссылка": i.url,
+                    "Артикул": re.search(r"\d+", i.url).group(0),
+                    "Цена": i.price,
+                    "Остаток": i.stock,
+                    "Продано": i.sold,
+                } for i in items_update]
+                send_records(items_update, f"Ежеднеаное обновление товаров с "
+                                           f"{shop} ({datetime.now().strftime('%d.%m')})")
 
-    Items.delete().where(Items.status == TaskStatus.LOAD_COMPLE).execute()
+                Items.update({Items.status: TaskStatus.UPDATE_SUSPENDED}).where(
+                    Items.status == TaskStatus.UPDATE_COMPLE).execute()
 
-    if datetime.now().strftime("%H:%M") == "00:00":
-        print("New cycle begin")
-        Items.update({Items.status: TaskStatus.FOR_UPDATE}).where(
-            Items.status.status == TaskStatus.UPDATE_COMPLE).execute()
-        time.sleep(60)
-    time.sleep(10)
+        Items.delete().where(Items.status == TaskStatus.LOAD_COMPLE).execute()
+        if datetime.now().strftime("%H:%M") == "00:00":
+            print("New cycle begin")
+            Items.update({Items.status: TaskStatus.FOR_UPDATE}).where(
+                Items.status.status == TaskStatus.UPDATE_SUSPENDED).execute()
+            time.sleep(60)
+        time.sleep(40)

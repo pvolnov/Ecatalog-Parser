@@ -13,6 +13,7 @@ class Parser:
     modal_accept = 0
 
     def __init__(self, SELENOID_ADRESS, SELENOID_PROXY):
+        print("connect to selenoid begin")
         self.driver = webdriver.Remote(
             command_executor=SELENOID_ADRESS,
             desired_capabilities={
@@ -20,6 +21,7 @@ class Parser:
                 "sessionTimeout": "2h"
             }
         )
+        print("connected")
         self.SELENOID_PROXY = SELENOID_PROXY
         self.ozon_cookies = self.get_ozon_cookies()
 
@@ -160,16 +162,18 @@ class Parser:
         return data
 
     def execute_task(self, t: Items):
-        if t.shop == "wildberries":
+        if t.shop == "wilberries":
             dat = self.parse_wileberrise(t.url)
         elif t.shop == "ozon":
             dat = self.parse_ozon(t.url)
         elif t.shop == "beru":
             dat = self.parse_beru(t.url)
+        else:
+            print("Unknown shop",t.shop)
 
         if t.shop == "beru":
             t.sold = dat["sold"]
-        elif t.shop == "wildberries" and t.status == TaskStatus.FOR_LOAD:
+        elif t.shop == "wilberries" and t.status == TaskStatus.FOR_LOAD:
             r = requests.get(t.url)
             count = re.search(r"ordersCount\":\d+", r.text)
             if count:
