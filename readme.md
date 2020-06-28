@@ -14,3 +14,6 @@
 
 1. Получаем `telegram_bot_key` и заменяем его в фале `config.py`
 2. Получаем `ru_captcha_key` и заменяем его в фале `config.py`
+3. Ставим зависимости из файла `requirements.txt`: `pip install -r requirements.txt`
+4. Запускаем telegram bot: `python3 tgbot.py`
+5. Запускаем monitor: `python3 monitor.py`
