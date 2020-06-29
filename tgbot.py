@@ -46,13 +46,13 @@ def start(message):
         will_load = Items.select().where(Items.status == TaskStatus.FOR_LOAD).count()
         loaded = Items.select().where(Items.status == TaskStatus.LOAD_COMPLE).count()
 
-        updated_done = Items.select().where(Items.status.in_[
+        updated_done = Items.select().where(Items.status.in_([
                                           TaskStatus.UPDATE_COMPLE,
-                                          TaskStatus.UPDATE_SUSPENDED]).count()
-        parsed_total = Items.select().where(Items.status.in_[
+                                          TaskStatus.UPDATE_SUSPENDED])).count()
+        parsed_total = Items.select().where(Items.status.in_([
                                           TaskStatus.UPDATE_COMPLE,
                                           TaskStatus.FOR_UPDATE,
-                                          TaskStatus.UPDATE_SUSPENDED]).count()
+                                          TaskStatus.UPDATE_SUSPENDED])).count()
 
         bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}\n"
                                           f"Обновлено {updated_done}/{parsed_total}")
@@ -143,4 +143,4 @@ def text_mes(message):
 
 
 print("Start")
-bot.polling(none_stop=True, timeout=60)
+bot.polling(none_stop=False, timeout=60)

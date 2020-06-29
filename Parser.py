@@ -18,7 +18,7 @@ class Parser:
             command_executor=SELENOID_ADRESS,
             desired_capabilities={
                 "browserName": "chrome",
-                "sessionTimeout": "2h"
+                "sessionTimeout": "5m"
             }
         )
         print("connected")
@@ -67,7 +67,16 @@ class Parser:
             self.driver.find_element_by_class_name("input-wrapper__content").send_keys(captcha_text)
             self.driver.find_element_by_class_name("submit").click()
             time.sleep(2)
-            return "captcha" not in self.driver.page_source
+            if "captcha" in self.driver.page_source:
+                r = requests.get("https://rucaptcha.com/res.php",
+                                 params={
+                                     "key": config.RU_CAPTCHA_APY_KEY,
+                                     "action": "reportbad",
+                                     "id": task_id
+                                 })
+                print("recaptcha is incorrect:", r.text)
+                time.sleep(10)
+                return False
         return True
 
     def get_ozon_cookies(self):
@@ -169,7 +178,8 @@ class Parser:
         elif t.shop == "beru":
             dat = self.parse_beru(t.url)
         else:
-            print("Unknown shop",t.shop)
+            print("Unknown shop", t.shop)
+            return
 
         if t.shop == "beru":
             t.sold = dat["sold"]

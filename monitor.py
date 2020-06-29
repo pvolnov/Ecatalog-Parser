@@ -16,9 +16,10 @@ bot = telebot.TeleBot(config.TG_BOT_APY_KEY)
 def send_records(items, caption=""):
     d = pd.DataFrame.from_dict(items)
     d.to_excel("data.xlsx")
-    with open("data.xlsx", "rb") as f:
-        for u in Users.select().select().execute():
+    for u in Users.select().select().execute():
+        with open("data.xlsx", "rb") as f:
             bot.send_document(u.tel_id, f, caption=caption)
+            print(f"Sended to {u.tel_id}")
 
 
 if __name__ == "__main__":
