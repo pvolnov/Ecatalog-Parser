@@ -40,30 +40,40 @@ class Parser:
                 for s in info['sizes'])
         }
 
-    def pass_beru_captcha(self, page):
-        if "captcha" in page:
-            print("Find captcha")
-            soup = BeautifulSoup(page, 'html5lib')
-            photo = requests.get(soup.img['src'])
-            files = {'file': ('captcha.jpg', photo.content)}
+    def get_captcha_ans(self, filename="captcha.png"):
+        with open(filename, "rb") as f:
             task_id = requests.post("https://rucaptcha.com/in.php",
                                     data={
                                         "key": config.RU_CAPTCHA_APY_KEY
-                                    }, files=files
+                                    }, files={"file": f}
                                     ).text[3:]
 
-            print(f"Get captcha ID {task_id}")
-            captcha_text = ""
-            while "OK" not in captcha_text:
-                time.sleep(2)
-                captcha_text = requests.get("https://rucaptcha.com/res.php",
-                                            params={
-                                                "key": config.RU_CAPTCHA_APY_KEY,
-                                                "action": "get",
-                                                "id": task_id
-                                            }).text
-            captcha_text = captcha_text[3:]
-            print(f"Get captcha result: {captcha_text}")
+        print(f"Get captcha ID {task_id}")
+        captcha_text = ""
+        while "OK" not in captcha_text:
+            time.sleep(3)
+            captcha_text = requests.get("https://rucaptcha.com/res.php",
+                                        params={
+                                            "key": "3e12df6ed3a4c0e9e7b2c951bb2c9c51",
+                                            "action": "get",
+                                            "id": task_id
+                                        }).text
+            if captcha_text == "ERROR_CAPTCHA_UNSOLVABLE":
+                return False, task_id
+
+        captcha_text = captcha_text[3:]
+        print(f"Get captcha result: {captcha_text}")
+        return captcha_text, task_id
+
+    def pass_beru_captcha(self, page):
+        if "captcha" in page:
+            print("Find captcha")
+            self.driver.find_element_by_tag_name("img").screenshot("captcha.png")
+
+            captcha_text, task_id = self.get_captcha_ans()
+            if not captcha_text:
+                return self.pass_beru_captcha(page)
+
             self.driver.find_element_by_class_name("input-wrapper__content").send_keys(captcha_text)
             self.driver.find_element_by_class_name("submit").click()
             time.sleep(2)
@@ -75,8 +85,9 @@ class Parser:
                                      "id": task_id
                                  })
                 print("recaptcha is incorrect:", r.text)
-                time.sleep(10)
+                time.sleep(2)
                 return False
+
         return True
 
     def get_ozon_cookies(self):
@@ -138,8 +149,11 @@ class Parser:
         self.driver.get(url)
         page = self.driver.page_source
 
+        captcha = False
         while not self.pass_beru_captcha(page):
-            pass
+            captcha = True
+        if captcha:
+            page = self.driver.page_source
 
         soup = BeautifulSoup(page, 'html5lib')
 
@@ -170,6 +184,9 @@ class Parser:
 
         return data
 
+    def step(self):
+        self.driver.refresh()
+
     def execute_task(self, t: Items):
         if t.shop == "wilberries":
             dat = self.parse_wileberrise(t.url)
@@ -198,8 +215,51 @@ class Parser:
         t.brand = dat["brand"]
         t.color = dat["color"]
 
-        if t.status == TaskStatus.FOR_LOAD:
-            t.status = TaskStatus.LOAD_COMPLE
-        else:
-            t.status = TaskStatus.UPDATE_COMPLE
-        t.save()
+        # if t.status == TaskStatus.FOR_LOAD:
+        #     t.status = TaskStatus.LOAD_COMPLE
+        # else:
+        #     t.status = TaskStatus.UPDATE_COMPLE
+        # t.save()
+
+    def catalog_parse(self, cat_urls, shop):
+        print(cat_urls, shop)
+
+        urls = []
+        for url in cat_urls:
+            for i in range(1, 99):
+                self.driver.get(f"{url}?page={i}")
+                page = self.driver.page_source
+                time.sleep(1)
+                soup = BeautifulSoup(page, 'html5lib')
+                if shop == "ozon":
+                    urs = soup.find("div", {"class": "widget-search-result-container"}).find_all("a",
+                                                                                                 {
+                                                                                                     "class": "tile-hover-target"})
+                    urs = ["https://www.ozon.ru" + a['href'].split("?")[0] for a in urs]
+                    if len(urs) < 36:
+                        break
+
+                elif shop == "beru":
+
+                    captcha = False
+                    while not self.pass_beru_captcha(page):
+                        captcha = True
+                    if captcha:
+                        time.sleep(2)
+                        soup = BeautifulSoup(self.driver.page_source, 'html5lib')
+
+                    urs = soup.find_all("a", {"href": lambda x: x and "product" in x})
+                    urs = ["https://beru.ru" + a['href'].split("?")[0] for a in urs]
+                    if len(urs) < 20:
+                        break
+
+                elif shop == 'wildberries':
+                    urs = soup.find_all("a", {"class": "ref_goods_n_p j-open-full-product-card"})
+                    urs = [a['href'] for a in urs]
+                    if len(urs) == 0:
+                        break
+                else:
+                    raise Exception("Invalid shop name")
+
+                urls += list(set(urs))
+        return urls

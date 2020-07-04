@@ -1,10 +1,9 @@
-from enum import Enum
-
+import pandas as pd
 import telebot
 from telebot import types
-import pandas as pd
 
 import config
+from Parser import Parser
 from config import TG_BOT_APY_KEY
 from models import Items, Users, DialogState, TaskStatus
 
@@ -47,12 +46,12 @@ def start(message):
         loaded = Items.select().where(Items.status == TaskStatus.LOAD_COMPLE).count()
 
         updated_done = Items.select().where(Items.status.in_([
-                                          TaskStatus.UPDATE_COMPLE,
-                                          TaskStatus.UPDATE_SUSPENDED])).count()
+            TaskStatus.UPDATE_COMPLE,
+            TaskStatus.UPDATE_SUSPENDED])).count()
         parsed_total = Items.select().where(Items.status.in_([
-                                          TaskStatus.UPDATE_COMPLE,
-                                          TaskStatus.FOR_UPDATE,
-                                          TaskStatus.UPDATE_SUSPENDED])).count()
+            TaskStatus.UPDATE_COMPLE,
+            TaskStatus.FOR_UPDATE,
+            TaskStatus.UPDATE_SUSPENDED])).count()
 
         bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}\n"
                                           f"Обновлено {updated_done}/{parsed_total}")
@@ -68,11 +67,9 @@ def new_doc(message):
         f.write(downloaded_file)
     data = pd.read_excel("file.xlsx")
     urls = list(data["Ссылка"])
-    if user.dstat == DialogState.WAIT_WILBERRIES_FOR_LOAD:
-        items = [{"url": u,
-                  "shop": "wilberries",
-                  "status": TaskStatus.FOR_LOAD} for u in urls]
-    elif user.dstat == DialogState.WAIT_WILBERRIES_FOR_PARSE:
+    bot.send_message(message.chat.id, f"Начали собирать товары с {len(urls)} категорий")
+
+    if user.dstat == DialogState.WAIT_WILBERRIES_FOR_PARSE:
         items = [{"url": u,
                   "shop": "wilberries",
                   "status": TaskStatus.FOR_UPDATE} for u in urls]
@@ -80,21 +77,32 @@ def new_doc(message):
         items = [{"url": u,
                   "shop": "ozon",
                   "status": TaskStatus.FOR_UPDATE} for u in urls]
-    elif user.dstat == DialogState.WAIT_OZON_FOR_LOAD:
-        items = [{"url": u,
-                  "shop": "ozon",
-                  "status": TaskStatus.FOR_LOAD} for u in urls]
     elif user.dstat == DialogState.WAIT_BERU_FOR_PARSE:
         items = [{"url": u,
                   "shop": "beru",
                   "status": TaskStatus.FOR_UPDATE} for u in urls]
-    elif user.dstat == DialogState.WAIT_BERU_FOR_LOAD:
-        items = [{"url": u,
-                  "shop": "beru",
-                  "status": TaskStatus.FOR_LOAD} for u in urls]
+
     else:
-        bot.reply_to(message, 'Error: incorrect message state')
-        return
+        ps = Parser(config.SELENOID_ADRESS, config.SELENOID_PROXY)
+
+        if user.dstat == DialogState.WAIT_BERU_FOR_LOAD:
+            urls = ps.catalog_parse(urls, "beru")
+            items = [{"url": u,
+                      "shop": "beru",
+                      "status": TaskStatus.FOR_LOAD} for u in urls]
+        elif user.dstat == DialogState.WAIT_OZON_FOR_LOAD:
+            urls = ps.catalog_parse(urls, "ozon")
+            items = [{"url": u,
+                      "shop": "ozon",
+                      "status": TaskStatus.FOR_LOAD} for u in urls]
+        elif user.dstat == DialogState.WAIT_WILBERRIES_FOR_LOAD:
+            urls = ps.catalog_parse(urls, "wildberries")
+            items = [{"url": u,
+                      "shop": "wilberries",
+                      "status": TaskStatus.FOR_LOAD} for u in urls]
+        else:
+            bot.reply_to(message, 'Error: incorrect message state')
+            return
 
     Items.insert_many(items).execute()
     user.dstat = DialogState.MENU
@@ -142,5 +150,5 @@ def text_mes(message):
                          parse_mode="HTML")
 
 
-print("Start")
+print("========START=========")
 bot.polling(none_stop=False, timeout=60)
