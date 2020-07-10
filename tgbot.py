@@ -1,34 +1,30 @@
+import re
+
 import pandas as pd
 import telebot
 from telebot import types
 
 import config
-from Parser import Parser
 from config import TG_BOT_APY_KEY
-from models import Items, Users, DialogState, TaskStatus
+from models import Items, Users, DialogState
+from monitor import parse_category
 
 
 class btns:
-    WAIT_OZON_FOR_LOAD = "Скачать товары с Ozon ⬇️"
-    WAIT_OZON_FOR_PARSE = "Мониторить товары Ozon 🔄"
-    WAIT_WILBERRIES_FOR_LOAD = "Скачать товары с Wilberries ⬇️"
-    WAIT_WILBERRIES_FOR_PARSE = "Мониторить товары с Wilberries 🔄"
-    WAIT_BERU_FOR_LOAD = "Скачать товары с Beru ⬇️"
-    WAIT_BERU_FOR_PARSE = "Мониторить товары Beru 🔄"
+    PARSE_ITEMS = "Скачать товары по прямым ссылкам ⬇️"
+    PARSE_CATEGORIES = "Выкачать все товары с категории 🗳"
+    PARSE_CATEGORIES_LITE = "Выкачать товары по превью с категорий 🔗"
 
 
 bot = telebot.TeleBot(TG_BOT_APY_KEY)
 
 parsels_keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
                                              one_time_keyboard=True,
-                                             row_width=2)
+                                             row_width=1)
 parsels_keyboard.add(
-    types.KeyboardButton(text=btns.WAIT_WILBERRIES_FOR_LOAD),
-    types.KeyboardButton(text=btns.WAIT_WILBERRIES_FOR_PARSE),
-    types.KeyboardButton(text=btns.WAIT_OZON_FOR_LOAD),
-    types.KeyboardButton(text=btns.WAIT_OZON_FOR_PARSE),
-    types.KeyboardButton(text=btns.WAIT_BERU_FOR_LOAD),
-    types.KeyboardButton(text=btns.WAIT_BERU_FOR_PARSE),
+    types.KeyboardButton(text=btns.PARSE_ITEMS),
+    types.KeyboardButton(text=btns.PARSE_CATEGORIES),
+    types.KeyboardButton(text=btns.PARSE_CATEGORIES_LITE),
 )
 
 
@@ -38,76 +34,61 @@ def start(message):
         bot.send_message(message.chat.id, "Пришлите пароль для активации бота")
     elif message.text == "/menu":
         user = Users.get(Users.tel_id == message.chat.id)
-        user.dstat = DialogState.MENU
+        user.dstat = DialogState.AUTH
         user.save()
         bot.send_message(message.chat.id, "Главное меню", reply_markup=parsels_keyboard)
+
     elif message.text == "/status":
-        will_load = Items.select().where(Items.status == TaskStatus.FOR_LOAD).count()
-        loaded = Items.select().where(Items.status == TaskStatus.LOAD_COMPLE).count()
+        will_load = Items.select().where(Items.done == False).count()
+        loaded = Items.select().where((Items.done == True) & (Items.sended == False)).count()
 
-        updated_done = Items.select().where(Items.status.in_([
-            TaskStatus.UPDATE_COMPLE,
-            TaskStatus.UPDATE_SUSPENDED])).count()
-        parsed_total = Items.select().where(Items.status.in_([
-            TaskStatus.UPDATE_COMPLE,
-            TaskStatus.FOR_UPDATE,
-            TaskStatus.UPDATE_SUSPENDED])).count()
-
-        bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}\n"
-                                          f"Обновлено {updated_done}/{parsed_total}")
+        bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}")
 
 
 @bot.message_handler(content_types=['document'])
 def new_doc(message):
-    user = Users.get(Users.tel_id == message.chat.id)
-    print("Mew doc", user.dstat)
-    file_info = bot.get_file(message.document.file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    with open("file.xlsx", "wb") as f:
-        f.write(downloaded_file)
-    data = pd.read_excel("file.xlsx")
-    urls = list(data["Ссылка"])
-    bot.send_message(message.chat.id, f"Начали собирать товары с {len(urls)} категорий")
-
-    if user.dstat == DialogState.WAIT_WILBERRIES_FOR_PARSE:
-        items = [{"url": u,
-                  "shop": "wilberries",
-                  "status": TaskStatus.FOR_UPDATE} for u in urls]
-    elif user.dstat == DialogState.WAIT_OZON_FOR_PARSE:
-        items = [{"url": u,
-                  "shop": "ozon",
-                  "status": TaskStatus.FOR_UPDATE} for u in urls]
-    elif user.dstat == DialogState.WAIT_BERU_FOR_PARSE:
-        items = [{"url": u,
-                  "shop": "beru",
-                  "status": TaskStatus.FOR_UPDATE} for u in urls]
-
-    else:
-        ps = Parser(config.SELENOID_ADRESS, config.SELENOID_PROXY)
-
-        if user.dstat == DialogState.WAIT_BERU_FOR_LOAD:
-            urls = ps.catalog_parse(urls, "beru")
-            items = [{"url": u,
-                      "shop": "beru",
-                      "status": TaskStatus.FOR_LOAD} for u in urls]
-        elif user.dstat == DialogState.WAIT_OZON_FOR_LOAD:
-            urls = ps.catalog_parse(urls, "ozon")
-            items = [{"url": u,
-                      "shop": "ozon",
-                      "status": TaskStatus.FOR_LOAD} for u in urls]
-        elif user.dstat == DialogState.WAIT_WILBERRIES_FOR_LOAD:
-            urls = ps.catalog_parse(urls, "wildberries")
-            items = [{"url": u,
-                      "shop": "wilberries",
-                      "status": TaskStatus.FOR_LOAD} for u in urls]
-        else:
-            bot.reply_to(message, 'Error: incorrect message state')
+    try:
+        user = Users.get(Users.tel_id == message.chat.id)
+        if user.dstat == DialogState.AUTH:
+            bot.send_message(message.chat.id, "Укажите тип парсинга")
             return
 
-    Items.insert_many(items).execute()
-    user.dstat = DialogState.MENU
-    user.save()
-    bot.reply_to(message, f'Sucsessfully added {len(items)} items', reply_markup=parsels_keyboard)
+        print("Mew doc", user.dstat)
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        with open("file.xlsx", "wb") as f:
+            f.write(downloaded_file)
+        data = pd.read_excel("file.xlsx")
+        urls = list(data["Ссылка"])
+
+        dstat = user.dstat
+        user.dstat = DialogState.AUTH
+        user.save()
+
+        if dstat == DialogState.PARSE_ITEMS:
+            items = [{"url": u} for u in urls]
+        else:
+            items = []
+            bot.send_message(message.chat.id, f"Начали собирать товары с {len(urls)} категорий")
+            for u in urls:
+                catid = re.search(r"\d+", u)
+                print("catid", catid)
+                if catid:
+                    items += parse_category(catid.group(0))
+                    print("items", len(items))
+                else:
+                    bot.send_message(message.chat.id, f"Некорректная ссылка на категорию: {u}\n"
+                                                      f"Ссылка на категорию должна заканчиваться на kXXX.htm, "
+                                                      f"пример правильной ссылки: https://www.e-katalog.ru/k556.htm")
+            if dstat == DialogState.PARSE_CATEGORIES_LITE:
+                for i in items:
+                    i['done'] = True
+
+        Items.insert_many(items).execute()
+        bot.reply_to(message, f'Sucsessfully added {len(items)} items', reply_markup=parsels_keyboard)
+
+    except Exception as e:
+        bot.reply_to(message, f'Error: {e}', reply_markup=parsels_keyboard)
 
 
 @bot.message_handler(content_types=["text"])
@@ -124,31 +105,24 @@ def text_mes(message):
         bot.send_message(message.chat.id, "Неверный пароль!")
         return
 
-    dstat = user.dstat
-    if message.text == btns.WAIT_WILBERRIES_FOR_LOAD:
-        user.dstat = DialogState.WAIT_WILBERRIES_FOR_LOAD
+    if message.text == btns.PARSE_ITEMS:
+        user.dstat = DialogState.PARSE_ITEMS
 
-    elif message.text == btns.WAIT_WILBERRIES_FOR_PARSE:
-        user.dstat = DialogState.WAIT_WILBERRIES_FOR_PARSE
+    elif message.text == btns.PARSE_CATEGORIES:
+        user.dstat = DialogState.PARSE_CATEGORIES
 
-    elif message.text == btns.WAIT_OZON_FOR_LOAD:
-        user.dstat = DialogState.WAIT_OZON_FOR_LOAD
+    elif message.text == btns.PARSE_CATEGORIES_LITE:
+        user.dstat = DialogState.PARSE_CATEGORIES_LITE
+    else:
+        bot.send_message(message.chat.id, "Команда не найдена")
+        return
 
-    elif message.text == btns.WAIT_OZON_FOR_PARSE:
-        user.dstat = DialogState.WAIT_OZON_FOR_PARSE
-
-    elif message.text == btns.WAIT_BERU_FOR_LOAD:
-        user.dstat = DialogState.WAIT_BERU_FOR_LOAD
-
-    elif message.text == btns.WAIT_BERU_FOR_PARSE:
-        user.dstat = DialogState.WAIT_BERU_FOR_PARSE
-
-    if dstat != user.dstat:
-        user.save()
-        bot.send_message(message.chat.id,
-                         "Пришлите документ в формате <b>.xlsx</b> с колонкой 'Ссылка' или нажмите /menu для отмены.",
-                         parse_mode="HTML")
+    user.save()
+    bot.send_message(message.chat.id,
+                     "Пришлите документ в формате <b>.xlsx</b> с колонкой 'Ссылка' или нажмите /menu для отмены.",
+                     parse_mode="HTML")
 
 
-print("========START=========")
-bot.polling(none_stop=False, timeout=60)
+if __name__ == "__main__":
+    print("========START=========")
+    bot.polling(none_stop=False, timeout=60)

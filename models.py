@@ -1,5 +1,5 @@
 from peewee import *
-from playhouse.postgres_ext import PostgresqlExtDatabase, ArrayField
+from playhouse.postgres_ext import PostgresqlExtDatabase, ArrayField, JSONField
 from enum import Enum
 from config import bdname, bduser, bdpassword, bdport, bdhost
 
@@ -7,48 +7,36 @@ db = PostgresqlExtDatabase(bdname, user=bduser, password=bdpassword,
                            host=bdhost, port=bdport)
 
 
-class TaskStatus:
-    FOR_UPDATE = 0
-    FOR_LOAD = 1
-    LOAD_COMPLE = 2
-    UPDATE_COMPLE = 3
-    UPDATE_SUSPENDED = 4
-
-
 class DialogState:
-    MENU = 0
-    WAIT_WILBERRIES_FOR_LOAD = 1
-    WAIT_WILBERRIES_FOR_PARSE = 2
-    WAIT_OZON_FOR_LOAD = 3
-    WAIT_OZON_FOR_PARSE = 4
-    WAIT_BERU_FOR_LOAD = 5
-    WAIT_BERU_FOR_PARSE = 6
+    AUTH = 0
+    PARSE_ITEMS = 1
+    PARSE_CATEGORIES = 2
+    PARSE_CATEGORIES_LITE = 3
 
 
 class Items(Model):
     url = TextField()
-    stars = TextField(default="")
-    price = IntegerField(default=0)
-    review = IntegerField(default=0)
-    stock = IntegerField(default=0)
-    sold = IntegerField(default=0)
-    status = IntegerField()
-    shop = TextField()
-    brand = TextField(default="-")
-    color = TextField(default="-")
+    name = TextField(default="")
+    category = IntegerField(default=-1)
+    min_price = TextField(default="-")
+    max_price = TextField(default="-")
+    keywords = ArrayField(TextField, default=[])
+    params = JSONField(default={})
+    done = BooleanField(default=False)
+    sended = BooleanField(default=False)
 
     class Meta:
         database = db
 
 
 class Users(Model):
+    name = TextField(default="")
     tel_id = BigIntegerField(unique=True)
-    name = TextField()
-    dstat = IntegerField(default=0)
+    dstat = IntegerField(default=DialogState.AUTH)
 
     class Meta:
         database = db
 
 
-# db.drop_tables([Items, Users])
-# db.create_tables([Items, Users])
+# db.drop_tables([Items, ])
+# db.create_tables([Items, ])
