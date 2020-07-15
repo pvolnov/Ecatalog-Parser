@@ -72,7 +72,6 @@ def new_doc(message):
             bot.send_message(message.chat.id, f"Начали собирать товары с {len(urls)} категорий")
             for u in urls:
                 catid = re.search(r"\d+", u)
-                print("catid", catid)
                 if catid:
                     items += parse_category(catid.group(0))
                     print("items", len(items))
@@ -84,7 +83,10 @@ def new_doc(message):
                 for i in items:
                     i['done'] = True
 
+        urls = [i['url'] for i in items]
+        Items.delete().where(Items.url.in_(urls)).execute()
         Items.insert_many(items).execute()
+
         bot.reply_to(message, f'Sucsessfully added {len(items)} items', reply_markup=parsels_keyboard)
 
     except Exception as e:
@@ -125,4 +127,4 @@ def text_mes(message):
 
 if __name__ == "__main__":
     print("========START=========")
-    bot.polling(none_stop=False, timeout=60)
+    bot.polling(none_stop=True, timeout=60)

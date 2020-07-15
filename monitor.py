@@ -1,5 +1,6 @@
 import re
 import time
+import traceback
 
 import pandas as pd
 import requests
@@ -17,13 +18,18 @@ bot = telebot.TeleBot(config.TG_BOT_APY_KEY)
 def parse_items(soup, catid):
     items = []
     for i in soup.find_all("table", {"class": "model-short-block"}):
-        if "#" in i.a['href']:
-            print(i)
-            continue
         item = {
             "keywords": [],
-            "params": {}
+            "params": {},
+            "external_url":False
         }
+
+        if "#" in i.a['href']:
+            href = re.search(r"https://www.e-katalog.ru/clcp.+?\"", str(soup)).group(0)[:-1]
+            item['external_url'] = True
+        else:
+            href = "https://www.e-katalog.ru" + i.a['href']
+
         for p in i.find_all("div", {"title": True}):
             wds = p.text.replace("\xa0", " ").split(":")
             if len(wds) > 1:
@@ -38,12 +44,15 @@ def parse_items(soup, catid):
             item["min_price"] = price[0].text.replace("\xa0", "")
             item["max_price"] = price[1].text.replace("\xa0", "")
         else:
-            price = i.find("div", {"class": "pr31 ib"}).span.text.replace("\xa0", "")
-            item["min_price"] = price
-            item["max_price"] = price
+            price = i.find("div", {"class": "pr31 ib"})
+            if price and price.span:
+                price = price.span.text.replace("\xa0", "")
+                item["min_price"] = price
+                item["max_price"] = price
+
         item['name'] = i.a['title']
         item['category'] = catid
-        item['url'] = "https://www.e-katalog.ru" + i.a['href']
+        item['url'] = href
         items.append(item)
     return items
 
@@ -51,10 +60,10 @@ def parse_items(soup, catid):
 def parse_category(catid):
     r = requests.get(f"https://www.e-katalog.ru/list/{catid}/")
     soup = BeautifulSoup(r.text, 'html5lib')
-    n = int(re.search(r"\d+", soup.find("div", {"class": "page-title"}).text).group(0)) // 24
+    n = int(re.search(r"\d+", soup.find("div", {"class": "page-title"}).text).group(0)) // 24 + 1
     res = []
-    for page in tqdm(range(1, n)):
-        r = requests.get(f"https://www.e-katalog.ru/list/84/{page}/")
+    for page in tqdm(range(0, n)):
+        r = requests.get(f"https://www.e-katalog.ru/list/{catid}/{page}/")
         soup = BeautifulSoup(r.text, 'html5lib')
         res += parse_items(soup, catid)
 
@@ -62,7 +71,14 @@ def parse_category(catid):
 
 
 def full_parse_item(url):
-    r = requests.get(url)
+    name = url.split("/")[-1].replace(".htm", "")
+    "https://www.e-katalog.ru/ek-item.php?resolved_name_=POZIS-RK-139&view_=tbl"
+
+    r = requests.get("https://www.e-katalog.ru/ek-item.php", params={
+        "resolved_name_": name,
+        "view_": "tbl"
+    })
+
     soup = BeautifulSoup(r.text, 'html5lib')
     item = {"keywords": [], "params": {}, "url": url, "name": soup.h1.text.replace("\xa0", " ")}
 
@@ -79,7 +95,8 @@ def full_parse_item(url):
     for tr in soup.find_all(lambda tag: tag.name == "tr" and tag.find("img") is None and len(tag.find_all("td")) == 2):
         wds = tr.find_all("td")
         if wds[1].text.replace("\xa0", " ") != "":
-            item['params'][wds[0].text.replace("\xa0", " ")] = wds[1].text.replace("\xa0", " ")
+            if "vote" not in wds[0].text:
+                item['params'][wds[0].text.replace("\xa0", " ")] = wds[1].text.replace("\xa0", " ")
 
         if wds[0].text == "Цвет":
             item['params']["Цвет"] = wds[1].div['title']
@@ -88,30 +105,49 @@ def full_parse_item(url):
 
 if __name__ == "__main__":
     print("========START=========")
+
     while True:
-        items = Items.select().where(Items.done == False).execute()
+        items = Items.select().where(Items.done == False).limit(1000).execute()
         for i in tqdm(items):
+            if i.external_url:
+                i.done = True
+                i.save()
+                continue
+
             try:
                 item = full_parse_item(i.url)
             except Exception as e:
                 print(e, i.url)
+                traceback.print_exc()
                 continue
-            i.done = True
+
             i.keywords = item['keywords']
             i.params = item['params']
             i.min_price = item['min_price']
             i.max_price = item['max_price']
             i.name = item['name']
+            i.done = True
             i.save()
 
-        items = Items.select().where((Items.done == True) & (Items.sended == False)).execute()
+        if Items.select().where(Items.done == False).count() > 0:
+            continue
+
+        items = Items.select().where((Items.done == True) & (Items.sended == False)).limit(1000).execute()
+        iurl = [i.url for i in items]
         items = [model_to_dict(item) for item in items]
 
         if len(items) > 0:
-            for i in items:
+            for i in tqdm(items):
                 i.update(i['params'])
+                for p in i['params']:
+                    if i['params'][p] == "":
+                        del i[p]
+
                 i['keywords'] = ";".join(i['keywords'])
+                if i['external_url']:
+                    i["Внешняя ссылка"] = "ДА"
                 del i['params']
+                del i['external_url']
                 del i['category']
                 del i['id']
                 del i['done']
@@ -123,5 +159,5 @@ if __name__ == "__main__":
                 with open("data.xlsx", "rb") as f:
                     bot.send_document(u.tel_id, f, caption="Вкаченные товары")
 
-            Items.update({Items.sended: True}).where(Items.done == True).execute()
+            Items.update({Items.sended: True}).where(Items.url.in_(iurl)).execute()
         time.sleep(20)

@@ -16,6 +16,7 @@ class DialogState:
 
 class Items(Model):
     url = TextField()
+    external_url = BooleanField(default=False)
     name = TextField(default="")
     category = IntegerField(default=-1)
     min_price = TextField(default="-")
