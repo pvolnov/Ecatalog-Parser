@@ -1,4 +1,5 @@
 import re
+import subprocess
 
 import pandas as pd
 import telebot
@@ -28,7 +29,7 @@ parsels_keyboard.add(
 )
 
 
-@bot.message_handler(commands=['start', 'menu', 'status'])
+@bot.message_handler(commands=['start', 'menu', 'status', 'restart'])
 def start(message):
     if message.text == "/start":
         bot.send_message(message.chat.id, "Пришлите пароль для активации бота")
@@ -43,6 +44,10 @@ def start(message):
         loaded = Items.select().where((Items.done == True) & (Items.sended == False)).count()
 
         bot.send_message(message.chat.id, f"Сохранено {loaded}/{loaded + will_load}")
+    else:
+        a = ["sudo" "supervisorctl", "restart", "ecat-monitor"]
+        tail = subprocess.check_output(a).decode("utf-8").strip()
+        bot.send_message(message.chat.id, f"Перезапускаю парсер:\n" + tail)
 
 
 @bot.message_handler(content_types=['document'])

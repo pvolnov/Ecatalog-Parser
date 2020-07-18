@@ -21,7 +21,7 @@ def parse_items(soup, catid):
         item = {
             "keywords": [],
             "params": {},
-            "external_url":False
+            "external_url": False
         }
 
         if "#" in i.a['href']:
@@ -72,7 +72,6 @@ def parse_category(catid):
 
 def full_parse_item(url):
     name = url.split("/")[-1].replace(".htm", "")
-    "https://www.e-katalog.ru/ek-item.php?resolved_name_=POZIS-RK-139&view_=tbl"
 
     r = requests.get("https://www.e-katalog.ru/ek-item.php", params={
         "resolved_name_": name,
@@ -80,7 +79,9 @@ def full_parse_item(url):
     })
 
     soup = BeautifulSoup(r.text, 'html5lib')
-    item = {"keywords": [], "params": {}, "url": url, "name": soup.h1.text.replace("\xa0", " ")}
+    item = {"keywords": [], "params": {}, "url": url,
+            # "name": soup.h1.text.replace("\xa0", " ").replace("Характеристики и описание", "")
+            }
 
     if soup.find("span", {"itemprop": "lowPrice"}):
         item['min_price'] = soup.find("span", {"itemprop": "lowPrice"}).text.replace("\xa0", " ")
@@ -92,11 +93,21 @@ def full_parse_item(url):
     for kw in soup.find_all("a", {"class": "ib no-u"}):
         item['keywords'].append(kw.text)
 
-    for tr in soup.find_all(lambda tag: tag.name == "tr" and tag.find("img") is None and len(tag.find_all("td")) == 2):
+    for tr in soup.find_all(lambda tag: tag.name == "tr" and len(tag.find_all("td")) == 2):
         wds = tr.find_all("td")
-        if wds[1].text.replace("\xa0", " ") != "":
+        if not wds[1].img:
             if "vote" not in wds[0].text:
-                item['params'][wds[0].text.replace("\xa0", " ")] = wds[1].text.replace("\xa0", " ")
+                val = ""
+                for elem in wds[1].contents:
+                    if isinstance(elem, str):
+                        val += elem.replace("\xa0", " ")
+                    else:
+                        val += "\n"
+
+                if re.search(r"\S", val):
+                    item['params'][wds[0].text.replace("\xa0", " ")] = val
+        elif "function" not in wds[0].text:
+            item['params'][wds[0].text.replace("\xa0", " ")] = "+"
 
         if wds[0].text == "Цвет":
             item['params']["Цвет"] = wds[1].div['title']
@@ -125,7 +136,6 @@ if __name__ == "__main__":
             i.params = item['params']
             i.min_price = item['min_price']
             i.max_price = item['max_price']
-            i.name = item['name']
             i.done = True
             i.save()
 
@@ -143,7 +153,7 @@ if __name__ == "__main__":
                     if i['params'][p] == "":
                         del i[p]
 
-                i['keywords'] = ";".join(i['keywords'])
+                i['keywords'] = "; ".join(i['keywords'])
                 if i['external_url']:
                     i["Внешняя ссылка"] = "ДА"
                 del i['params']
