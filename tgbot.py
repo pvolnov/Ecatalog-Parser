@@ -29,7 +29,7 @@ parsels_keyboard.add(
 )
 
 
-@bot.message_handler(commands=['start', 'menu', 'status', 'restart'])
+@bot.message_handler(commands=['start', 'menu', 'status', 'restart','end'])
 def start(message):
     if message.text == "/start":
         bot.send_message(message.chat.id, "Пришлите пароль для активации бота")
@@ -38,6 +38,10 @@ def start(message):
         user.dstat = DialogState.AUTH
         user.save()
         bot.send_message(message.chat.id, "Главное меню", reply_markup=parsels_keyboard)
+
+    elif message.text == "/end":
+        bot.send_message(message.chat.id, f"Очередь на выкачку очищенна")
+        Items.update({Items.done: True}).execute()
 
     elif message.text == "/status":
         will_load = Items.select().where(Items.done == False).count()

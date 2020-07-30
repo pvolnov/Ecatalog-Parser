@@ -40,4 +40,4 @@ class Users(Model):
 
 
 # db.drop_tables([Items, ])
-# db.create_tables([Items, ])
+# db.create_tables([Items,Users ])

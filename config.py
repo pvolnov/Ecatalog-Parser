@@ -1,7 +1,7 @@
 bdname = 'ecatalog'
 bduser = 'postgres'
 bdpassword = 'nef441'
-bdhost = '51.79.69.179'
+bdhost = 'sw.neafiol.site'
 bdport = 5432
 
 TG_BOT_PASW = "admin88r"
